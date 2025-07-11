@@ -1,5 +1,7 @@
 import re
 import json
+from utils.miner_http_tools import config_miner_work_mode
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def parse_time_to_seconds(s):
@@ -17,35 +19,16 @@ def parse_time_to_seconds(s):
     return h * 3600 + m * 60 + sec
 
 
-def sleep_all_miner(df):
+def change_work_mode(df, mode):
+    task_ip_list = []
     for index, row in df.iterrows():
         ip = row['IP']
         config = {
             "bitmain-fan-ctrl": False,
             "bitmain-fan-pwm": "100",
-            "miner-mode": 1,
-            "pools": [
-                {"url": f"stratum+tcp://{row['矿池1']}", "user": row["矿机名1"], "pass": "root"},
-                {"url": f"stratum+tcp://{row['矿池2']}", "user": row["矿机名2"], "pass": "root"},
-                {"url": f"stratum+tcp://{row['矿池3']}", "user": row["矿机名3"], "pass": "root"},
-            ]
-        }
-        print(json.dumps(config, ensure_ascii=False, indent=2))
+            "bitmain-hashrate-percent": "100",
+            "miner-mode": mode,
 
-
-def change_miner_work_mode(task_ips, mode):
-    for ip in task_ips:
-        ip[1]['bitmain-fan-ctrl'] = False
-        ip[1]['bitmain-fan-pwm'] = "100"
-        ip[1]['miner-mode'] = mode
-        print(ip[0], json.dumps(ip[1], ensure_ascii=False, indent=2))
-
-
-def wake_up_all_miner(df):
-    task_ip_list = []
-    for index, row in df.iterrows():
-        ip = row['IP']
-        config = {
             "pools": [
                 {"url": f"stratum+tcp://{row['矿池1']}", "user": row["矿机名1"], "pass": "root"},
                 {"url": f"stratum+tcp://{row['矿池2']}", "user": row["矿机名2"], "pass": "root"},
@@ -54,4 +37,15 @@ def wake_up_all_miner(df):
         }
         #     print(json.dumps(config, ensure_ascii=False, indent=2))
         task_ip_list.append([ip, config])
-    change_miner_work_mode(task_ip_list, 0)
+    results = []  # 用于保存所有结果
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        futures = [executor.submit(config_miner_work_mode, task) for task in task_ip_list]
+
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                results.append(result)
+            except Exception as e:
+                results.append(["未知IP", f"执行失败: {e}"])
+
+    return results

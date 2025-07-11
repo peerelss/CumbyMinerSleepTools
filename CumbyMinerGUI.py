@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
     QFileDialog, QLineEdit, QLabel
 )
 import re
-from utils.miner_util_tools import parse_time_to_seconds, sleep_all_miner, wake_up_all_miner
+from utils.miner_util_tools import parse_time_to_seconds, change_work_mode
 
 
 class MyWindow(QWidget):
@@ -30,6 +30,7 @@ class MyWindow(QWidget):
         self.btn_select_excel.clicked.connect(self.select_excel)
 
         self.btn_wake = QPushButton("唤醒机器")
+        self.btn_wake.clicked.connect(self.wake_up_miner)
         self.btn_sleep = QPushButton("休眠机器")
         self.btn_sleep.clicked.connect(self.sleep_all_miner)
         self.btn_low_power = QPushButton("切换低功耗")
@@ -71,10 +72,23 @@ class MyWindow(QWidget):
         filtered_df = self.df[self.df["运行时长（秒）"] > 1]
 
         self.show_df(filtered_df)
-        wake_up_all_miner(filtered_df)
+        result_task = change_work_mode(filtered_df, 1)
+        self.display_result_table(result_task)
 
     def wake_up_miner(self):
-        pass
+        if self.df is None:
+            print("未加载数据")
+            return
+
+            # 新建一列：运行时长（秒）
+        self.df["运行时长（秒）"] = self.df["启动时间"].astype(str).apply(parse_time_to_seconds)
+
+        # 过滤出运行大于1秒的记录
+        filtered_df = self.df[self.df["运行时长（秒）"] == 1]
+
+        self.show_df(filtered_df)
+        result_task = change_work_mode(filtered_df, 0)
+        self.display_result_table(result_task)
 
     def select_excel(self):
         file_name, _ = QFileDialog.getOpenFileName(
@@ -106,6 +120,16 @@ class MyWindow(QWidget):
             for j in range(len(df.columns)):
                 item = QTableWidgetItem(str(df.iat[i, j]))
                 self.table.setItem(i, j, item)
+
+    def display_result_table(self, results):
+        self.table.clear()
+        self.table.setRowCount(len(results))
+        self.table.setColumnCount(2)
+        self.table.setHorizontalHeaderLabels(["IP地址", "状态"])
+
+        for i, row in enumerate(results):
+            self.table.setItem(i, 0, QTableWidgetItem(str(row[0])))
+            self.table.setItem(i, 1, QTableWidgetItem(str(row[1])))
 
 
 if __name__ == "__main__":
